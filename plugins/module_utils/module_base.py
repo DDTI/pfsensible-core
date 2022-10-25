@@ -52,26 +52,24 @@ class PFSenseModuleBase(object):
             fname = name
 
         if self.params.get(name) is not None:
-            if not (exclude is not None and exclude == self.params[name]):
-                if isinstance(self.params[name], int):
-                    obj[fname] = str(self.params[name])
-                else:
-                    obj[fname] = self.params[name]
+            if isinstance(self.params[name], int):
+                obj[fname] = str(self.params[name])
+            elif exclude is None:
+                obj[fname] = self.params[name]
+            elif exclude != self.params[name]:
+                obj[fname] = self.params[name]
         elif force:
             obj[fname] = force_value
 
-    def _get_ansible_param_bool(self, obj, name, fname=None, force=False, value='yes', value_false=None):
+    def _get_ansible_param_bool(self, obj, name, fname=None, force=False, value='yes'):
         """ get bool parameter from params and set it into obj """
         if fname is None:
             fname = name
 
-        if self.params.get(name) is not None:
-            if self.params.get(name):
-                obj[fname] = value
-            elif force:
-                obj[fname] = value_false
+        if self.params.get(name):
+            obj[fname] = value
         elif force:
-            obj[fname] = value_false
+            obj[fname] = None
 
     @staticmethod
     def _params_to_obj():

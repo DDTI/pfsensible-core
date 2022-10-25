@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 # Copyright: (c) 2018, Frederic Bor <frederic.bor@wanadoo.fr>
-# Copyright: (c) 2021-2022, Orion Poplawski <orion@nwra.com>
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 
 from __future__ import absolute_import, division, print_function
@@ -39,7 +38,6 @@ options:
     type: str
   enable:
     description: Enable interface.
-    default: no
     type: bool
   ipv4_type:
     description: IPv4 Configuration Type.
@@ -120,18 +118,13 @@ EXAMPLES = """
 
 RETURN = """
 commands:
-    description: The set of commands that would be pushed to the remote device (if pfSense had a CLI).
+    description: the set of commands that would be pushed to the remote device (if pfSense had a CLI)
     returned: always
     type: list
     sample: [
         "create interface 'voice', port='mvneta0.100', speed_duplex='autoselect', enable='True'",
         "delete interface 'voice'"
     ]
-ifname:
-    description: The pseudo-device name of the interface.
-    returned: always
-    type: str
-    sample: opt1
 """
 
 from ansible.module_utils.basic import AnsibleModule

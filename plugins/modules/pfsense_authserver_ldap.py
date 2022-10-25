@@ -96,24 +96,7 @@ options:
     description: LDAP Group objectClass naming attribute
     default: posixGroup
     type: str
-  ldap_rfc2307:
-    description: LDAP Server uses RFC 2307 style group membership (RFC 2307bis when False)
-    type: bool
-  ldap_rfc2307_userdn:
-    description: Use DN for username search (pfsense-CE >=2.5.0, pfsense-PLUS >=21.2)
-    type: bool
-  ldap_utf8:
-    description: UTF8 encode LDAP parameters before sending them to the server.
-    type: bool
-  ldap_nostrip_at:
-    description: Do not strip away parts of the username after the @ symbol
-    type: bool
-  ldap_pam_groupdn:
-    description: Shell Authentication Group DN (pfsense-CE >=2.5.0, pfsense-PLUS >=21.2)
-    type: str
-  ldap_allow_unauthenticated:
-    description: Allow unauthenticated bind (pfsense-CE >=2.5.0, pfsense-PLUS >=21.2)
-    type: bool
+
 """
 
 EXAMPLES = """
@@ -146,52 +129,9 @@ RETURN = """
 from ansible.module_utils.basic import AnsibleModule
 from ansible_collections.pfsensible.core.plugins.module_utils.module_base import PFSenseModuleBase
 
-PFSENSE_AUTHSERVER_LDAP_SPEC = {
-    'name': {'required': True, 'type': 'str'},
-    'state': {
-        'default': 'present',
-        'choices': ['present', 'absent']
-    },
-    'host': {'type': 'str'},
-    'port': {'default': '389', 'type': 'str'},
-    'transport': {
-        'choices': ['tcp', 'starttls', 'ssl']
-    },
-    'ca': {'default': 'global', 'type': 'str'},
-    'protver': {
-        'default': '3',
-        'choices': ['2', '3']
-    },
-    'timeout': {'default': '25', 'type': 'str'},
-    'scope': {
-        'choices': ['one', 'subtree']
-    },
-    'basedn': {'required': False, 'type': 'str'},
-    'authcn': {'required': False, 'type': 'str'},
-    'extended_enabled': {'default': False, 'type': 'bool'},
-    'extended_query': {'default': '', 'type': 'str'},
-    'binddn': {'required': False, 'type': 'str'},
-    'bindpw': {'required': False, 'type': 'str'},
-    'attr_user': {'default': 'cn', 'type': 'str'},
-    'attr_group': {'default': 'cn', 'type': 'str'},
-    'attr_member': {'default': 'member', 'type': 'str'},
-    'attr_groupobj': {'default': 'posixGroup', 'type': 'str'},
-    'ldap_pam_groupdn': {'required': False, 'type': 'str'},
-    'ldap_utf8': {'required': False, 'type': 'bool'},
-    'ldap_nostrip_at': {'required': False, 'type': 'bool'},
-    'ldap_rfc2307': {'required': False, 'type': 'bool'},
-    'ldap_rfc2307_userdn': {'required': False, 'type': 'bool'},
-    'ldap_allow_unauthenticated': {'required': False, 'type': 'bool'},
-}
-
 
 class PFSenseAuthserverLDAPModule(PFSenseModuleBase):
     """ module managing pfsense LDAP authentication """
-
-    @staticmethod
-    def get_argument_spec():
-        """ return argument spec """
-        return PFSENSE_AUTHSERVER_LDAP_SPEC
 
     def __init__(self, module, pfsense=None):
         super(PFSenseAuthserverLDAPModule, self).__init__(module, pfsense)
@@ -204,9 +144,6 @@ class PFSenseAuthserverLDAPModule(PFSenseModuleBase):
     #
     def _validate_params(self):
         """ do some extra checks on input parameters """
-
-        if int(self.params['timeout']) < 1:
-            self.module.fail_json(msg='timeout {0} must be greater than 1'.format(self.params['timeout']))
 
     def _params_to_obj(self):
         """ return a dict from module params """
@@ -246,19 +183,6 @@ class PFSenseAuthserverLDAPModule(PFSenseModuleBase):
             obj['ldap_attr_group'] = params['attr_group']
             obj['ldap_attr_member'] = params['attr_member']
             obj['ldap_attr_groupobj'] = params['attr_groupobj']
-            if params['ldap_utf8']:
-                obj['ldap_utf8'] = ''
-            if params['ldap_nostrip_at']:
-                obj['ldap_nostrip_at'] = ''
-            if params['ldap_rfc2307']:
-                obj['ldap_rfc2307'] = ''
-
-            if self.pfsense.is_at_least_2_5_0():
-                obj['ldap_pam_groupdn'] = params['ldap_pam_groupdn']
-                if params['ldap_rfc2307_userdn']:
-                    obj['ldap_rfc2307_userdn'] = ''
-                if params['ldap_allow_unauthenticated']:
-                    obj['ldap_allow_unauthenticated'] = ''
 
             # Find the caref id for the named CA
             obj['ldap_caref'] = self.pfsense.get_caref(params['ca'])
@@ -288,16 +212,14 @@ class PFSenseAuthserverLDAPModule(PFSenseModuleBase):
         return self.authservers.index(self.target_elt)
 
     def _find_last_index(self):
-        if self.authservers:
-            return list(self.root_elt).index(self.authservers[len(self.authservers) - 1])
-        else:
-            return 0
+        return list(self.root_elt).index(self.authservers[len(self.authservers) - 1])
 
     def _create_target(self):
         """ create the XML target_elt """
-        elt = self.pfsense.new_element('authserver')
-        elt.append(self.pfsense.new_element('ldap_allow_unauthenticated', text=None))
-        return elt
+        target_elt = self.pfsense.new_element('authserver')
+        self.root_elt.append(target_elt)
+  
+        return target_elt
 
     def _copy_and_add_target(self):
         """ populate the XML target_elt """
@@ -305,7 +227,6 @@ class PFSenseAuthserverLDAPModule(PFSenseModuleBase):
         obj['refid'] = self.pfsense.uniqid()
         self.pfsense.copy_dict_to_element(obj, self.target_elt)
         self.diff['after'] = obj
-        self.root_elt.insert(self._find_last_index(), self.target_elt)
 
     def _copy_and_update_target(self):
         """ update the XML target_elt """
@@ -320,7 +241,7 @@ class PFSenseAuthserverLDAPModule(PFSenseModuleBase):
     #
     def _get_obj_name(self):
         """ return obj's name """
-        return "'{0}'".format(self.obj['name'])
+        return self.obj['name']
 
     def _log_fields(self, before=None):
         """ generate pseudo-CLI command fields parameters to create an obj """
@@ -330,7 +251,37 @@ class PFSenseAuthserverLDAPModule(PFSenseModuleBase):
 
 def main():
     module = AnsibleModule(
-        argument_spec=PFSENSE_AUTHSERVER_LDAP_SPEC,
+        argument_spec={
+            'name': {'required': True, 'type': 'str'},
+            'state': {
+                'default': 'present',
+                'choices': ['present', 'absent']
+            },
+            'host': {'type': 'str'},
+            'port': {'default': '389', 'type': 'str'},
+            'transport': {
+                'choices': ['tcp', 'starttls', 'ssl']
+            },
+            'ca': {'default': 'global', 'type': 'str'},
+            'protver': {
+                'default': '3',
+                'choices': ['2', '3']
+            },
+            'timeout': {'default': '25', 'type': 'str'},
+            'scope': {
+                'choices': ['one', 'subtree']
+            },
+            'basedn': {'required': False, 'type': 'str'},
+            'authcn': {'required': False, 'type': 'str'},
+            'extended_enabled': {'default': False, 'type': 'bool'},
+            'extended_query': {'default': '', 'type': 'str'},
+            'binddn': {'required': False, 'type': 'str'},
+            'bindpw': {'required': False, 'type': 'str'},
+            'attr_user': {'default': 'cn', 'type': 'str'},
+            'attr_group': {'default': 'cn', 'type': 'str'},
+            'attr_member': {'default': 'member', 'type': 'str'},
+            'attr_groupobj': {'default': 'posixGroup', 'type': 'str'},
+        },
         required_if=[
             ["state", "present", ["host", "port", "transport", "scope", "authcn"]],
         ],

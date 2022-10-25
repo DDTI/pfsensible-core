@@ -40,37 +40,7 @@ class PFSenseVlanModule(PFSenseModuleBase):
         self.setup_vlan_cmds = ""
 
         # get physical interfaces on which vlans can be set
-        get_interface_cmd = (
-            'require_once("/etc/inc/interfaces.inc");'
-            '$portlist = get_interface_list();'
-            '$lagglist = get_lagg_interface_list();'
-            '$portlist = array_merge($portlist, $lagglist);'
-            'foreach ($lagglist as $laggif => $lagg) {'
-            "    $laggmembers = explode(',', $lagg['members']);"
-            '    foreach ($laggmembers as $lagm)'
-            '        if (isset($portlist[$lagm]))'
-            '            unset($portlist[$lagm]);'
-            '}')
-
-        if self.pfsense.is_at_least_2_5_0():
-            get_interface_cmd += (
-                '$list = array();'
-                'foreach ($portlist as $ifn => $ifinfo) {'
-                '  $list[$ifn] = $ifn . " (" . $ifinfo["mac"] . ")";'
-                '  $iface = convert_real_interface_to_friendly_interface_name($ifn);'
-                '  if (isset($iface) && strlen($iface) > 0)'
-                '    $list[$ifn] .= " - $iface";'
-                '}'
-                'echo json_encode($list);')
-        else:
-            get_interface_cmd += (
-                '$list = array();'
-                'foreach ($portlist as $ifn => $ifinfo)'
-                '   if (is_jumbo_capable($ifn))'
-                '       array_push($list, $ifn);'
-                'echo json_encode($list);')
-
-        self.interfaces = self.pfsense.php(get_interface_cmd)
+        self.interfaces = self.pfsense.get_ports()
 
     ##############################
     # params processing

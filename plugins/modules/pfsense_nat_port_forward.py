@@ -16,13 +16,13 @@ DOCUMENTATION = """
 module: pfsense_nat_port_forward
 version_added: 0.1.0
 author: Frederic Bor (@f-bor)
-short_description: Manage pfSense port forwarding NAT (DNAT) rules
+short_description: Manage pfSense Port Forward NAT Entries
 description:
-  - Manage pfSense port forwarding NAT (DNAT) rules.
+  - Manage pfSense Port Forward NAT Entries
 notes:
 options:
   descr:
-    description: The name of the NAT rule
+    description: The name of the nat rule
     required: true
     default: null
     type: str

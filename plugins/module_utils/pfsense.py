@@ -20,20 +20,14 @@ import xml.etree.ElementTree as ET
 from tempfile import mkstemp
 
 
-def xml_find(node, elt):
-    res = node.find(elt)
-    if res is None:
-        res = ET.Element('')
-        res.text = ''
-    return res
-
-
 class PFSenseModule(object):
     """ class managing pfsense base configuration """
 
+    # pylint: disable=bad-option-value, import-outside-toplevel
     from ansible_collections.pfsensible.core.plugins.module_utils.__impl.interfaces import (
         get_interface_display_name,
         get_interface_elt,
+        get_interface_elt_by_display_name,
         get_interface_port,
         get_interface_port_by_display_name,
         get_interface_by_display_name,
@@ -43,6 +37,7 @@ class PFSenseModule(object):
         is_interface_group,
         is_interface_port,
         parse_interface,
+        get_ports,
     )
     from ansible_collections.pfsensible.core.plugins.module_utils.__impl.addresses import (
         is_ipv4_address,
@@ -55,25 +50,32 @@ class PFSenseModule(object):
         parse_ip_network,
         parse_port,
     )
-    from ansible_collections.pfsensible.core.plugins.module_utils.__impl.checks import check_name, check_ip_address, validate_string
+    from ansible_collections.pfsensible.core.plugins.module_utils.__impl.checks import check_name, check_ip_address
 
+    def _find_or_create_element_in_root(self, name):
+        ret = self.get_element(name)
+        if ret is None:
+            ret = self.new_element(name)
+            self.root.append(ret)
+        return ret
+        
     def __init__(self, module, config='/cf/conf/config.xml'):
         self.module = module
         self.config = config
         self.tree = ET.parse(config)
         self.root = self.tree.getroot()
         self.config_version = float(self.get_element('version').text)
-        self.aliases = self.get_element('aliases')
-        self.interfaces = self.get_element('interfaces')
-        self.ifgroups = self.get_element('ifgroups')
-        self.rules = self.get_element('filter')
-        self.shapers = self.get_element('shaper')
-        self.dnshapers = self.get_element('dnshaper')
-        self.vlans = self.get_element('vlans')
-        self.gateways = self.get_element('gateways')
-        self.ipsec = self.get_element('ipsec')
-        self.openvpn = self.get_element('openvpn')
-        self.virtualip = self.get_element('virtualip')
+        self.aliases = self._find_or_create_element_in_root('aliases')
+        self.interfaces = self._find_or_create_element_in_root('interfaces')
+        self.ifgroups = self._find_or_create_element_in_root('ifgroups')
+        self.rules = self._find_or_create_element_in_root('filter')
+        self.shapers = self._find_or_create_element_in_root('shaper')
+        self.dnshapers = self._find_or_create_element_in_root('dnshaper')
+        self.vlans = self._find_or_create_element_in_root('vlans')
+        self.gateways = self._find_or_create_element_in_root('gateways')
+        self.ipsec = self._find_or_create_element_in_root('ipsec')
+        self.openvpn = self._find_or_create_element_in_root('openvpn')
+        self.virtualip = self._find_or_create_element_in_root('virtualip')
         self.debug = open('/tmp/pfsense.debug', 'w')
         if sys.version_info >= (3, 4):
             self._scrub()
@@ -210,7 +212,7 @@ class PFSenseModule(object):
             return floating
         elif floating:
             return False
-        return interface_elt is not None and interface_elt.text.lower() == interface.lower()
+        return interface_elt is not None and interface_elt.text == interface
 
     def get_interface_rules_count(self, interface, floating):
         """ get rules count in interface/floating """
@@ -254,12 +256,15 @@ class PFSenseModule(object):
                 elif isinstance(value, list):
                     for item in value:
                         new_elt = self.new_element(key)
-                        new_elt.text = item
+                        if isinstance(item, dict):
+                            self.copy_dict_to_element(item, new_elt, sub=sub+1)
+                        else:
+                            new_elt.text = str(item)
                         top_elt.append(new_elt)
                 else:
                     # Create a new element
                     new_elt = ET.Element(key)
-                    new_elt.text = value
+                    new_elt.text = str(value)
                     new_elt.tail = '\n%s' % ('\t' * (sub + 3))
                     top_elt.append(new_elt)
                 self.debug.write('changed=%s added key=%s value=%s tag=%s\n' % (changed, key, value, top_elt.tag))
@@ -289,14 +294,14 @@ class PFSenseModule(object):
                             if all_sub_elts[idx].text is None and item == '':
                                 pass
                             elif all_sub_elts[idx].text != item:
-                                all_sub_elts[idx].text = item
+                                all_sub_elts[idx].text = str(item)
                                 changed = True
                         elif self.copy_dict_to_element(item, all_sub_elts[idx], sub=sub + 1):
                             changed = True
                 elif this_elt.text is None and value == '':
                     pass
                 elif this_elt.text != value:
-                    this_elt.text = value
+                    this_elt.text = str(value)
                     changed = True
                 self.debug.write('changed=%s this_elt.text=%s value=%s\n' % (changed, this_elt.text, value))
         # Sub-elements must be completely described, so remove any missing elements
@@ -307,19 +312,7 @@ class PFSenseModule(object):
                     self.debug.write('changed=%s removed tag=%s\n' % (changed, child_elt.tag))
                     top_elt.remove(child_elt)
 
-        self.debug.flush()
         return changed
-
-    @staticmethod
-    def dict_to_php(src, php_name):
-        """ Generate PHP commands to initialiaze a variable with contents of a dict """
-        cmd = "${0} = array();\n".format(php_name)
-        for key, value in src.items():
-            if value is not None:
-                cmd += "${0}['{1}'] = '{2}';\n".format(php_name, key, value)
-            else:
-                cmd += "${0}['{1}'] = '';\n".format(php_name, key)
-        return cmd
 
     @staticmethod
     def element_to_dict(src_elt):
@@ -347,8 +340,8 @@ class PFSenseModule(object):
         # Otherwise search for added CAs
         cas = self.get_elements('ca')
         for elt in cas:
-            if xml_find(elt, 'descr').text == name:
-                return xml_find(elt, 'refid').text
+            if elt.find('descr').text == name:
+                return elt.find('refid').text
         return None
 
     @staticmethod
@@ -366,7 +359,7 @@ class PFSenseModule(object):
     def find_alias(self, name, aliastype=None):
         """ return alias named name, having type aliastype if specified """
         for alias in self.aliases:
-            if xml_find(alias, 'name').text == name and (aliastype is None or xml_find(alias, 'type').text == aliastype):
+            if alias.find('name').text == name and (aliastype is None or alias.find('type').text == aliastype):
                 return alias
         return None
 
@@ -423,7 +416,7 @@ class PFSenseModule(object):
         if uniqid_elt is None:
             return None
 
-        return "_vip" + xml_find(vip_elt, 'uniqid').text
+        return "_vip" + vip_elt.find('uniqid').text
 
     def find_queue(self, name, interface=None, enabled=False):
         """ return QOS queue if found """
@@ -481,7 +474,7 @@ class PFSenseModule(object):
 
         if self.vlans is not None:
             for vlan in self.vlans:
-                if xml_find(vlan, 'if').text == interface and xml_find(vlan, 'tag').text == tag:
+                if vlan.find('if').text == interface and vlan.find('tag').text == tag:
                     return vlan
 
         return None
@@ -502,13 +495,13 @@ class PFSenseModule(object):
             if gw_elt.tag != 'gateway_item':
                 continue
 
-            if protocol is not None and xml_find(gw_elt, 'ipprotocol').text != protocol:
+            if protocol is not None and gw_elt.find('ipprotocol').text != protocol:
                 continue
 
-            if interface is not None and xml_find(gw_elt, 'interface').text != interface:
+            if interface is not None and gw_elt.find('interface').text != interface:
                 continue
 
-            if xml_find(gw_elt, 'name').text == name:
+            if gw_elt.find('name').text == name:
                 return gw_elt
 
         for interface_elt in self.interfaces:
@@ -545,7 +538,7 @@ class PFSenseModule(object):
         for gw_grp_elt in self.gateways:
             if gw_grp_elt.tag != 'gateway_group':
                 continue
-            if xml_find(gw_grp_elt, 'name').text != name:
+            if gw_grp_elt.find('name').text != name:
                 continue
 
             # check if protocol match
@@ -586,13 +579,13 @@ class PFSenseModule(object):
     def uniqid(prefix='', more_entropy=False):
         """ return an identifier based on time """
         if more_entropy:
-            return prefix + '{0:x}{1:05x}{2:.8F}'.format(int(time.time()), int(time.time() * 1000000) % 0x100000, random.random() * 10)
+            return prefix + hex(int(time.time()))[2:10] + hex(int(time.time() * 1000000) % 0x100000)[2:7] + "%.8F" % (random.random() * 10)
 
-        return prefix + '{0:x}{1:05x}'.format(int(time.time()), int(time.time() * 1000000) % 0x100000)
+        return prefix + hex(int(time.time()))[2:10] + hex(int(time.time() * 1000000) % 0x100000)[2:7]
 
     def phpshell(self, command):
         """ Run a command in the php developer shell """
-        command = "global $debug;\n$debug = 1;\n" + command + "\nexec\nexit"
+        command = "global $debug;\n$debug = 1;\nrequire_once('util.inc');\n" + command + "\ncarp_sync_client();\nexec\nexit"
         # Dummy argument suppresses displaying help message
         return self.module.run_command('/usr/local/sbin/pfSsh.php dummy', data=command)
 
@@ -602,20 +595,21 @@ class PFSenseModule(object):
         cmd += command
         cmd += '\n?>\n'
         (dummy, stdout, stderr) = self.module.run_command('/usr/local/bin/php', data=cmd)
+        print(f"DEBUG php command execution:\n {cmd}")
         # TODO: check stderr for errors
         return json.loads(stdout)
 
     def write_config(self, descr='Updated by ansible pfsense module'):
         """ Generate config file """
         revision = self.get_element('revision')
-        xml_find(revision, 'time').text = '%d' % time.time()
+        revision.find('time').text = '%d' % time.time()
         revdescr = revision.find('description')
         if revdescr is None:
             revdescr = ET.Element('description')
             revision.append(revdescr)
         revdescr.text = descr
         username = self.get_username()
-        xml_find(revision, 'username').text = username
+        revision.find('username').text = username
         (tmp_handle, tmp_name) = mkstemp()
         os.close(tmp_handle)
         if sys.version_info >= (3, 4):
@@ -658,7 +652,7 @@ class PFSenseModule(object):
                 self.module.fail_json(msg="Unable to get version from pfSense (got '{0}')".format(pfsense_version))
             for idx in range(0, match.lastindex):
                 self.pfsense_version.append(int(match.group(idx + 1)))
-
+        
         # we must compare a CE with a CE or pfSense+ with pfSense+
         is_ce_in = self.is_ce_version(version)
         is_ce = self.is_ce_version(self.pfsense_version)
@@ -667,6 +661,9 @@ class PFSenseModule(object):
 
         for idx, ver in enumerate(version):
             if idx == len(self.pfsense_version):
+                return True
+            
+            if self.pfsense_version[idx] > ver and or_more:
                 return True
 
             if ver < self.pfsense_version[idx] and not or_more or ver > self.pfsense_version[idx]:
