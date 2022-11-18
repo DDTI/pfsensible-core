@@ -17,7 +17,7 @@ OPENVPN_ARGUMENT_SPEC = dict(
     authmode=dict(required=True, type='list', elements='str'),
     protocol=dict(default='UDP4', options=['UDP4', 'UDP6', 'TCP4', 'TCP6', 'UDP', 'TCP']),
     dev_mode=dict(default='tun', options=['tun', 'tap']),
-    if_descr=dict(required=True, type='str'),
+    interface=dict(required=True, type='str'),
     ipaddr=dict(default='', type='str'),
     local_port=dict(default=1194, type='int'),
     descr=dict(required=True, type='str'),
@@ -61,7 +61,7 @@ OPENVPN_ARGUMENT_SPEC = dict(
     create_gw=dict(default='both', choices=['v4only', 'v6only', 'both']),
     verbosity_level=dict(default=1, type='int'),
     data_ciphers=dict(default=['AES-256-GCM','AES-128-GCM','CHACHA20-POLY1305'], type='list', elements='str'),
-    ncp_enable=dict(default=False, type='bool'),
+    ncp_enable=dict(default=False, type='str'),
     ping_method=dict(default="keepalive", choices=['keepalive', 'ping']),
     keepalive_interval=dict(default=10, type='int'),
     keepalive_timeout=dict(default=60, type='int'),
@@ -112,10 +112,7 @@ class PFSenseOpenVpnModule(PFSenseModuleBase):
             obj["authmode"] = ','.join(params["authmode"])
             self._get_ansible_param(obj, "protocol")
             self._get_ansible_param(obj, "dev_mode")
-            if params["if_descr"] != "any":
-                obj["interface"] = self.pfsense.get_interface_by_display_name(params["if_descr"])
-            else:
-                obj["interface"] = "any"
+            self._get_ansible_param(obj, "interface")
             self._get_ansible_param(obj, "ipaddr")
             self._get_ansible_param(obj, "local_port")
             self._get_ansible_param(obj, "descr", fname="description")
@@ -168,7 +165,7 @@ class PFSenseOpenVpnModule(PFSenseModuleBase):
             self._get_ansible_param(obj, "create_gw")
             self._get_ansible_param(obj, "verbosity_level")
             obj["data_ciphers"] = ','.join(params["data_ciphers"])
-            self._get_ansible_param_bool(obj, "ncp_enable")
+            self._get_ansible_param(obj, "ncp_enable")
             self._get_ansible_param(obj, "ping_method")
             self._get_ansible_param(obj, "keepalive_interval")
             self._get_ansible_param(obj, "keepalive_timeout")
@@ -242,9 +239,6 @@ echo json_encode(array('vpnid'=>openvpn_vpnid_next()));
             if not authmode in self.get_auth_servers():
                 self.module.fail_json(msg=f'authmode, {authmode} is not a valid auth')
         
-        if params["if_descr"]!="any" and not self.pfsense.is_interface_display_name(params["if_descr"]):
-            self.module.fail_json(msg=f'if_descr, {params["if_descr"]} is not a display name of interface')
-
         if not self.pfsense.is_ipv4_address(params["ipaddr"]) and params["ipaddr"]!='':
             self.module.fail_json(msg=f'ipaddr, {params["ipaddr"]} is not a valid ipv4 address')
         

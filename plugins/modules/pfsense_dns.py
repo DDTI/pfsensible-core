@@ -18,7 +18,7 @@ DNS_DOMAIN_OVERRIDE_SPEC = dict(
     ip=dict(required=True, type='str'),
     descr=dict(default='', type='str'),
     tls_hostname=dict(default='', type='str'),
-    forward_tls_upstream=dict(default='', type='str'),  
+    forward_tls_upstream=dict(default=False, type='bool'),  
 )
 
 DNS_HOST_ALIAS_SPEC = dict(
